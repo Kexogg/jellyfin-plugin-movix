@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Movix connector for Jellyfin</title>
+</head>
+<body>
+<div id="MovixConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-checkbox,emby-select">
+    <div data-role="content">
+        <div class="content-primary">
+            <h1>Movix connector for Jellyfin</h1>
+            <p>Connect your Movix subscription to Jellyfin Live TV.</p>
+            <div class="verticalSection">
+                <h2>Settings</h2>
+                <form id="MovixSettingsForm">
+                    <div class="inputContainer"><label class="inputLabel" for="ApiBaseUrl">Movix API URL</label><input
+                            is="emby-input" id="ApiBaseUrl" required/></div>
+                    <div class="inputContainer"><label class="inputLabel" for="EpgBaseUrl">External XMLTV URL
+                        (optional)</label><input is="emby-input" id="EpgBaseUrl"/>
+                        <div class="fieldDescription">Leave empty to use the official authenticated Movix guide API. A
+                            direct .xml or .xml.gz URL overrides it.
+                        </div>
+                    </div>
+                    <div class="inputContainer"><label class="inputLabel" for="ContentBaseUrl">Movix content URL</label><input
+                            is="emby-input" id="ContentBaseUrl" required/></div>
+                    <div class="inputContainer"><label class="inputLabel" for="ClientVersion">Client
+                        version</label><input is="emby-input" id="ClientVersion" required/></div>
+                    <div class="inputContainer"><label class="inputLabel" for="SimultaneousStreams">Simultaneous
+                        streams</label><input is="emby-input" id="SimultaneousStreams" type="number" min="1" max="4"/>
+                    </div>
+                    <label class="emby-checkbox-label"><input is="emby-checkbox" id="IncludeAdultChannels"
+                                                              type="checkbox"/><span>Include adult channels</span></label>
+                    <button is="emby-button" type="submit" class="raised button-submit block"><span>Save settings</span>
+                    </button>
+                </form>
+            </div>
+            <div class="verticalSection">
+                <h2>Password sign-in</h2>
+                <div class="selectContainer"><label class="selectLabel" for="Region">Region</label><select
+                        is="emby-select" id="Region"></select></div>
+                <div class="inputContainer"><label class="inputLabel" for="Username">Contract or login</label><input
+                        is="emby-input" id="Username" autocomplete="username"/></div>
+                <div class="inputContainer"><label class="inputLabel" for="Password">Password</label><input
+                        is="emby-input" id="Password" type="password" autocomplete="current-password"/></div>
+                <button is="emby-button" id="PasswordLogin" class="raised block"><span>Authenticate</span></button>
+            </div>
+            <div class="verticalSection">
+                <h2>SMS sign-in</h2>
+                <div class="inputContainer"><label class="inputLabel" for="Phone">Phone</label><input is="emby-input"
+                                                                                                      id="Phone"
+                                                                                                      type="tel"/></div>
+                <button is="emby-button" id="FindAgreements" class="raised block"><span>Find agreements</span></button>
+                <div class="selectContainer"><label class="selectLabel" for="Agreement">Agreement</label><select
+                        is="emby-select" id="Agreement"></select></div>
+                <button is="emby-button" id="SendSms" class="raised block"><span>Send code</span></button>
+                <div class="inputContainer"><label class="inputLabel" for="SmsCode">SMS code</label><input
+                        is="emby-input" id="SmsCode" inputmode="numeric"/></div>
+                <button is="emby-button" id="ConfirmSms" class="raised block"><span>Confirm code</span></button>
+            </div>
+            <div class="verticalSection">
+                <h2>Status</h2>
+                <pre id="StatusText">Loading…</pre>
+                <button is="emby-button" id="Connect" class="raised button-submit block"><span>Connect to Jellyfin Live TV</span>
+                </button>
+                <button is="emby-button" id="Refresh" class="raised block"><span>Refresh channels and guide</span>
+                </button>
+                <button is="emby-button" id="Disconnect" class="raised button-delete block"><span>Disconnect</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <script type="text/javascript">
+        (() => {
+            const pluginId = '6fd31852-e733-47bb-b23d-bf7ddc78f6bd';
+            const page = document.querySelector('#MovixConfigPage');
+            let challengeId = null;
+            const api = (path, options = {}) => ApiClient.fetch({
+                url: ApiClient.getUrl('Movix/Admin/' + path),
+                type: options.method || 'GET',
+                data: options.body,
+                dataType: options.dataType || 'json',
+                contentType: 'application/json',
+                headers: {accept: 'application/json'}
+            });
+            const body = value => JSON.stringify(value);
+            const busy = async action => {
+                Dashboard.showLoadingMsg();
+                try {
+                    return await action();
+                } catch (e) {
+                    Dashboard.alert(e.message || String(e));
+                    throw e;
+                } finally {
+                    Dashboard.hideLoadingMsg();
+                }
+            };
+            const populateSelect = (select, values, valueSelector, labelSelector) => {
+                select.replaceChildren(...values.map((item, index) => {
+                    const option = document.createElement('option');
+                    option.value = valueSelector(item, index);
+                    option.textContent = labelSelector(item);
+                    return option;
+                }));
+            };
+
+            async function status() {
+                const value = await api('Status');
+                page.querySelector('#StatusText').textContent = JSON.stringify(value, null, 2);
+            }
+
+            async function load() {
+                const config = await ApiClient.getPluginConfiguration(pluginId);
+                ['ApiBaseUrl', 'EpgBaseUrl', 'ContentBaseUrl', 'ClientVersion', 'SimultaneousStreams'].forEach(id => page.querySelector('#' + id).value = config[id]);
+                page.querySelector('#IncludeAdultChannels').checked = config.IncludeAdultChannels;
+                const regions = await api('Regions');
+                populateSelect(page.querySelector('#Region'), regions, x => x.Id, x => x.Title);
+                await status();
+            }
+
+            page.addEventListener('pageshow', () => busy(load));
+            page.querySelector('#MovixSettingsForm').addEventListener('submit', e => busy(async () => {
+                e.preventDefault();
+                const c = await ApiClient.getPluginConfiguration(pluginId);
+                ['ApiBaseUrl', 'EpgBaseUrl', 'ContentBaseUrl', 'ClientVersion'].forEach(id => c[id] = page.querySelector('#' + id).value);
+                c.SimultaneousStreams = Number(page.querySelector('#SimultaneousStreams').value);
+                c.IncludeAdultChannels = page.querySelector('#IncludeAdultChannels').checked;
+                await ApiClient.updatePluginConfiguration(pluginId, c);
+                Dashboard.processPluginConfigurationUpdateResult();
+            }));
+            page.querySelector('#PasswordLogin').addEventListener('click', () => busy(async () => {
+                await api('Login/Password', {
+                    method: 'POST',
+                    body: body({
+                        username: page.querySelector('#Username').value,
+                        password: page.querySelector('#Password').value,
+                        region: page.querySelector('#Region').value
+                    })
+                });
+                page.querySelector('#Password').value = '';
+                await status();
+            }));
+            page.querySelector('#FindAgreements').addEventListener('click', () => busy(async () => {
+                const values = await api('Login/Sms/Agreements', {
+                    method: 'POST',
+                    body: body({phone: page.querySelector('#Phone').value})
+                });
+                const select = page.querySelector('#Agreement');
+                populateSelect(select, values, (_, i) => String(i), x => x.Title);
+                select.dataset.items = JSON.stringify(values);
+            }));
+            page.querySelector('#SendSms').addEventListener('click', () => busy(async () => {
+                const select = page.querySelector('#Agreement');
+                const item = JSON.parse(select.dataset.items || '[]')[Number(select.value)];
+                if (!item) throw new Error('Select an agreement first.');
+                const value = await api('Login/Sms/Request', {
+                    method: 'POST',
+                    body: body({phone: page.querySelector('#Phone').value, agreementId: item.Id, region: item.Region})
+                });
+                challengeId = value.ChallengeId;
+            }));
+            page.querySelector('#ConfirmSms').addEventListener('click', () => busy(async () => {
+                await api('Login/Sms/Confirm', {
+                    method: 'POST',
+                    body: body({challengeId, code: page.querySelector('#SmsCode').value})
+                });
+                page.querySelector('#SmsCode').value = '';
+                await status();
+            }));
+            page.querySelector('#Connect').addEventListener('click', () => busy(async () => {
+                await api('Connect', {method: 'POST'});
+                await status();
+            }));
+            page.querySelector('#Refresh').addEventListener('click', () => busy(async () => {
+                await api('Refresh', {method: 'POST'});
+                await status();
+            }));
+            page.querySelector('#Disconnect').addEventListener('click', () => busy(async () => {
+                await api('Disconnect', {method: 'POST', dataType: 'text'});
+                await status();
+            }));
+        })();
+    </script>
+</div>
+</body>
+</html>

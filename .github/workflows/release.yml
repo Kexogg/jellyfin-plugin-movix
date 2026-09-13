@@ -1,0 +1,114 @@
+name: Release plugin
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Build release package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          manifest_version=$(sed -n 's/^version: *"\([^"]*\)"/\1/p' build.yaml)
+          tag_version="${RELEASE_TAG#v}"
+          if [ "$tag_version" != "$manifest_version" ]; then
+            echo "::error::Release tag $RELEASE_TAG does not match build.yaml version $manifest_version"
+            exit 1
+          fi
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore JellyfinMovix.slnx
+
+      - name: Verify formatting and analyzers
+        run: dotnet format JellyfinMovix.slnx --verify-no-changes --severity info --no-restore
+
+      - name: Test
+        run: dotnet test JellyfinMovix.slnx --configuration Release --no-restore
+
+      - name: Package plugin
+        id: package
+        run: |
+          pipx install jprm
+          mkdir -p artifacts
+          artifact=$(jprm plugin build . --output=artifacts)
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-package
+          path: |
+            ${{ steps.package.outputs.artifact }}
+            ${{ steps.package.outputs.artifact }}.md5sum
+          if-no-files-found: error
+
+  publish:
+    name: Publish release and manifest
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Download package
+        uses: actions/download-artifact@v8
+        with:
+          name: plugin-package
+          path: artifacts
+
+      - name: Upload release assets and update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          pipx install jprm
+          artifact=$(find artifacts -maxdepth 1 -type f -name '*.zip' -print -quit)
+          if [ -z "$artifact" ]; then
+            echo "::error::Plugin ZIP was not downloaded"
+            exit 1
+          fi
+          asset_name=$(basename "$artifact")
+          source_url="https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG/$asset_name"
+          gh release upload "$RELEASE_TAG" "$artifact" "$artifact.md5sum" --clobber
+          jprm repo add --plugin-url "$source_url" manifest.json "$artifact"
+
+      - name: Publish manifest
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if git diff --cached --quiet; then
+            echo "Manifest already contains $RELEASE_TAG"
+            exit 0
+          fi
+          git commit -m "Publish $RELEASE_TAG"
+          git push

@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <PluginVersion>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)build.yaml')), 'version:\s*"([^"]+)"').Groups.get_Item(1).Value)</PluginVersion>
+    <Version Condition="'$(Version)' == ''">$(PluginVersion)</Version>
+    <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(PluginVersion)</AssemblyVersion>
+    <FileVersion Condition="'$(FileVersion)' == ''">$(PluginVersion)</FileVersion>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+</Project>
