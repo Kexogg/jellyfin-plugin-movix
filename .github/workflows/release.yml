@@ -3,12 +3,22 @@ name: Release plugin
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to publish
+        required: true
+        type: string
 
 permissions:
   contents: write
 
+env:
+  JPRM_VERSION: 1.1.0
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+
 concurrency:
-  group: release-${{ github.event.release.tag_name }}
+  group: release-${{ github.event.release.tag_name || inputs.release_tag }}
   cancel-in-progress: false
 
 jobs:
@@ -21,11 +31,9 @@ jobs:
       - name: Check out release tag
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Verify release version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           manifest_version=$(sed -n 's/^version: *"\([^"]*\)"/\1/p' build.yaml)
           tag_version="${RELEASE_TAG#v}"
@@ -51,7 +59,7 @@ jobs:
       - name: Package plugin
         id: package
         run: |
-          pipx install jprm
+          pipx install "jprm==$JPRM_VERSION"
           mkdir -p artifacts
           artifact=$(jprm plugin build . --output=artifacts)
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
@@ -86,9 +94,8 @@ jobs:
       - name: Upload release assets and update manifest
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          pipx install jprm
+          pipx install "jprm==$JPRM_VERSION"
           artifact=$(find artifacts -maxdepth 1 -type f -name '*.zip' -print -quit)
           if [ -z "$artifact" ]; then
             echo "::error::Plugin ZIP was not downloaded"
@@ -97,11 +104,9 @@ jobs:
           asset_name=$(basename "$artifact")
           source_url="https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG/$asset_name"
           gh release upload "$RELEASE_TAG" "$artifact" "$artifact.md5sum" --clobber
-          jprm repo add --plugin-url "$source_url" manifest.json "$artifact"
+          jprm repo add --plugin-url "$source_url" . "$artifact"
 
       - name: Publish manifest
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
