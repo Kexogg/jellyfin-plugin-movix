@@ -29,6 +29,7 @@ public sealed class MovixGatewayService(
     private EpgSnapshot? _epg;
 
     public int SupportedChannels => _channels?.Channels.Count ?? 0;
+
     public string? LastError { get; private set; }
 
     public string GetInternalBaseUrl() => applicationHost.GetLocalApiUrl("127.0.0.1", "http", applicationHost.HttpPort).TrimEnd('/');

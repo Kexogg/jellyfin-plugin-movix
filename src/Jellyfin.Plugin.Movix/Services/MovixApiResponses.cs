@@ -188,5 +188,4 @@ internal sealed class MovixProgramResponse
 
     [JsonPropertyName("duration")]
     public long Duration { get; set; }
-
 }

@@ -93,9 +93,15 @@ public sealed class MovixAdminController(
 }
 
 public sealed record PasswordLoginRequest(string Username, string Password, string Region);
+
 public sealed record SmsPhoneRequest(string Phone);
+
 public sealed record SmsStartRequest(string Phone, string AgreementId, string Region);
+
 public sealed record SmsConfirmRequest(string ChallengeId, string Code);
+
 public sealed record RegionDto(string Id, long Code, string Title);
+
 public sealed record SmsAgreementDto(string Id, string Region, string Title);
+
 public sealed record SmsChallengeDto(string ChallengeId);
