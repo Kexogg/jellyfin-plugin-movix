@@ -1,1 +1,20 @@
-[]
+[
+    {
+        "guid": "6fd31852-e733-47bb-b23d-bf7ddc78f6bd",
+        "name": "Movix connector for Jellyfin",
+        "description": "Authenticates Movix subscription and exposes supported live channels to Jellyfin through its native M3U and XMLTV pipeline.\n",
+        "overview": "Movix Live TV through Jellyfin's M3U and XMLTV pipeline",
+        "owner": "kexogg",
+        "category": "LiveTV",
+        "versions": [
+            {
+                "version": "0.1.0.0",
+                "changelog": "Initial release\n",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/Kexogg/jellyfin-plugin-movix/releases/download/v0.1.0.0/movix-connector-for-jellyfin_0.1.0.0.zip",
+                "checksum": "9bf037b65de37bbae7846dba6a883671",
+                "timestamp": "2026-09-14T18:10:27Z"
+            }
+        ]
+    }
+]
